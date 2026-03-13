@@ -3,7 +3,7 @@
 Кастомный экспортер температуры для датчиков ***DS18B20***, подключенных к ***Wiren Board [WB-M1W2](https://wirenboard.com/ru/product/WB-M1W2/)***, который преобразует данные из *MQTT* в формат *Prometheus*. В качестве источника - контроллер *[HOMEd Nano Gateway](https://mediawiki.homed.dev/page/Hardware/HOMEd_Gateway_Nano)*.
 Основное отличие экспортера от других решений - реализация комбинированной модели сбора данных (pull+push).
 
-**Принцип работы:** экспортер подписывается на `mqtt`-топик с данными от датчиков, периодически получает показания от них (по мере изменения температуры). Дополнительно, один раз за заданный интервал, экспортер отправляет команду *getProperties* (согласно [документации](https://mediawiki.homed.dev/page/ZigBee/Topics) проекта **[HOMEd](https://wiki.homed.dev/)**), чтобы получить актуальное или последнее известное (на момент запроса) состояние температуры.
+**Принцип работы:** экспортер подписывается на `mqtt`-топик с данными от датчиков, периодически получает показания от них (по мере изменения температуры). Дополнительно, один раз за заданный интервал, экспортер отправляет команду `getProperties` (согласно [документации](https://mediawiki.homed.dev/page/ZigBee/Topics) проекта **[HOMEd](https://wiki.homed.dev/)**), чтобы получить актуальное или последнее известное (на момент запроса) состояние температуры.
 
 
 ### Дополнительно
@@ -27,21 +27,21 @@
 - Настройте переменные окружения (переименуйте `env.example` в `.env` - с точкой в начале);
 - Для быстрого тестирования (не рекомендуется) запустить можно так: \
 `python3 prom_exporter.py`
-<br>
 - Проверьте метрики: \
-`http://<ip>:<port>/metrics`
-`http://<ip>:<port>/health`
-<br>
-- В дальнейшем, рабочий вариант, рекомедуется запускать как сервис через ***systemd:***
-  - откройте и отредактируйте переменные: `WorkingDirectory` и `ExecStart` в `modbus-wb-exporter.service`
-  - скопируйте или создайте симлинк файла службы в каталог: `/etc/systemd/system/`
-  - активируйте сервис и запустите его: \
-  `systemctl daemon-reload` \
-  `systemctl start modbus-wb-exporter.service` \
-  `systemctl enable modbus-wb-exporter.service`
-  <br>
-  - проверить статус можно так: \
-  `systemctl status modbus-wb-exporter.service`
+`http://ip:port/metrics` \
+`http://ip:port/health`
+
+В дальнейшем, рабочий вариант, рекомедуется запускать как сервис через ***systemd:***
+- откройте и отредактируйте переменные: `WorkingDirectory` и `ExecStart` в `modbus-wb-exporter.service`
+- скопируйте или создайте симлинк файла службы в каталог: `/etc/systemd/system/`
+
+- активируйте сервис и запустите его: \
+`systemctl daemon-reload` \
+`systemctl start modbus-wb-exporter.service` \
+`systemctl enable modbus-wb-exporter.service`
+
+- проверить статус можно так: \
+`systemctl status modbus-wb-exporter.service`
 
 ---
 
@@ -57,7 +57,7 @@
 ### Пример дашборда 
 ***(Grafana)***
 - Импортируйте `JSON template` из директории `grafana` \
-в директории `images` - можно посмотреть скрин-пример дашборда.
+(в директории `images` можно посмотреть скрин-пример дашборда).
 
 ---
 
@@ -75,3 +75,5 @@ scrape_configs:
         labels:
           instance: "wb-modbus-controller"
 ```
+
+---
