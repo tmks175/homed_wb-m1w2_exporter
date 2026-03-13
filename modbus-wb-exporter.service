@@ -1,0 +1,17 @@
+[Unit]
+Description=Modbus WB MQTT Prometheus Exporter
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/modbus-wb
+ExecStart=/opt/modbus-wb/venv/bin/python /opt/modbus-wb/prom-exporter.py
+
+Restart=always
+RestartSec=60
+TimeoutStopSec=15
+
+#Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
