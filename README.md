@@ -1,6 +1,6 @@
 ## Prometheus HOMEd + Wiren Board (M1W2) Exporter
 
-Кастомный экспортер температуры для датчиков ***DS18B20***, подключенных к ***Wiren Board [WB-M1W2](https://wirenboard.com/ru/product/WB-M1W2/)***, который преобразует данные из *MQTT* в формат *Prometheus*. В качестве источника - контроллер *[HOMEd Nano Gateway](https://mediawiki.homed.dev/page/Hardware/HOMEd_Gateway_Nano)*.
+Кастомный экспортер температуры для датчиков ***DS18B20***, подключенных к ***Wiren Board [WB-M1W2](https://wirenboard.com/ru/product/WB-M1W2/)***, для преобразования данных из *MQTT* в формат *Prometheus*. В качестве источника - контроллер *[HOMEd Nano Gateway](https://mediawiki.homed.dev/page/Hardware/HOMEd_Gateway_Nano)*.
 Основное отличие экспортера от других решений - реализация комбинированной модели сбора данных (pull+push).
 
 **Принцип работы:** экспортер подписывается на `mqtt`-топик с данными от датчиков, периодически получает показания от них (по мере изменения температуры). Дополнительно, один раз за заданный интервал, экспортер отправляет команду `getProperties` (согласно [документации](https://mediawiki.homed.dev/page/ZigBee/Topics) проекта **[HOMEd](https://wiki.homed.dev/)**), чтобы получить актуальное или последнее известное (на момент запроса) состояние температуры.
