@@ -30,11 +30,9 @@ CACHE_DIR = os.getenv("CACHE_DIR", "/opt/modbus-wb/tmp-temp")
 LOG_FILE = os.getenv("LOG_FILE", "/opt/modbus-wb/prom_exporter.log")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 HTTP_PORT = int(os.getenv("HTTP_PORT", 8010))
+MAX_CACHE_AGE_SEC = int(os.getenv("MAX_CACHE_AGE_SEC", "600"))
 
-MAX_CACHE_AGE_SEC = 1 * 3600 # возраст кэша 1 час
-# MAX_CACHE_AGE_SEC = 30 * 60 # 30 минут (или другой)
-
-# Logger
+# Логгер
 log_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
 file_handler = RotatingFileHandler(LOG_FILE, maxBytes=256*1024, backupCount=3)
 file_handler.setFormatter(log_formatter)
@@ -44,6 +42,12 @@ logger = logging.getLogger("modbus_exporter")
 logger.setLevel(LOG_LEVEL)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
+
+if MAX_CACHE_AGE_SEC < POLL_INTERVAL_SEC:
+    logger.warning(
+        f"MAX_CACHE_AGE_SEC ({MAX_CACHE_AGE_SEC} сек) меньше POLL_INTERVAL_SEC "
+        f"({POLL_INTERVAL_SEC} сек) - кэш может устареть раньше следующего опроса"
+    )
 
 # Prometheus метрики
 temp_gauge = Gauge('modbus_temperature', 'Temperature from Modbus sensor', ['device', 'sensor'])
@@ -80,7 +84,7 @@ def save_to_cache(sensor, value):
             old_str = f.read().strip()
             old_temp = float(old_str)
         
-        # Порог изменения - например 0.1 °C (влияет на частоту записей файлов кэша на диск - искал золотую середину)
+        # Порог изменения - например 0.1 °C (влияет на частоту записей файлов кэша на диск)
         if abs(new_temp - old_temp) < 0.1:
             logger.debug(f"[sensor {sensor}] Изменение < 0.1 °C ({old_temp} → {new_temp}) - пропускаем запись")
             return
@@ -123,10 +127,9 @@ def on_message(client, userdata, msg):
             with temps_lock:
                 received_temps[sensor] = temp
             
-            # received_temps[sensor] = temp
             temp_gauge.labels(device=DEVICE, sensor=sensor).set(round(temp, 1))
             last_update.labels(device=DEVICE, sensor=sensor).set(time.time())
-            data_age.labels(device=DEVICE, sensor=sensor).set(0)
+            data_age.labels(device=DEVICE, sensor=sensor).set(0)  # если есть обновиление - age=0
             save_to_cache(sensor, temp)
             logger.info(f"[sensor {sensor}] Температура: {temp}")
         else:
@@ -144,28 +147,29 @@ client.on_disconnect = on_disconnect
 
 # Функция опроса
 def poll_data():
-    # global received_temps
     with temps_lock:
         received_temps.clear()
+
     success = False
-    
+
     for attempt in range(5):        # Retry 5 раз
         try:
-            if not MQTT_BROKER or MQTT_BROKER.strip() == "":
-                logger.critical("Параметры для MQTT_BROKER не указаны. Проверьте .env")
-                sys.exit(1)
-                
-            if not client.is_connected():
-                client.connect_async(MQTT_BROKER, MQTT_PORT, 60)
-                if not mqtt_connected.wait(timeout=10):  # Таймаут 10 сек на попытку
-                    raise Exception("MQTT connect timeout in attempt")  # Переход в except и retry
-            
             payload = {"action": "getProperties", "device": DEVICE}
-            # client.publish(CMD_TOPIC, json.dumps(payload))
-            result = client.publish(CMD_TOPIC, json.dumps(payload))
+            result = client.publish(CMD_TOPIC, json.dumps(payload), qos=0)
+
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
-                logger.error("MQTT publish failed")
-                
+                logger.warning(f"Publish rc={result.rc} (attempt {attempt+1})")
+
+                if result.rc == mqtt.MQTT_ERR_NO_CONN:
+                    logger.info("MQTT not connected - trying reconnect")
+                    try:
+                        client.reconnect()
+                    except Exception as e:
+                        logger.debug(f"Reconnect failed: {e}")
+
+                time.sleep(2 ** attempt)
+                continue
+
             logger.info(f"Отправлен запрос для wb-m1w2 с адресом {DEVICE}")
             
             # ждем ответы с таймаутом 10 сек
@@ -173,20 +177,21 @@ def poll_data():
             while time.time() - start < 10:
                 with temps_lock:
                     # if len(received_temps) >= 1:
-                    
                     # ok - если ответили оба сенсора (выше - один сенсор)
                     if len(received_temps) >= len(SENSORS):
                         success = True
                         break
                 time.sleep(0.5)
-            
+
             if success:
                 break
-                
+
+            logger.warning(f"Ответы от датчиков не получены (attempt {attempt+1})")
+
         except Exception as e:
-            logger.error(f"Попытка {attempt+1} неудачна: {e}")
-            time.sleep(2 ** attempt)  # Экспоненциальная задержка
-    
+            logger.error(f"Попытка {attempt+1} упала с исключением: {e}")
+            time.sleep(2 ** attempt)
+
     up_gauge.set(1 if success else 0)
     
     if not success:
@@ -253,7 +258,7 @@ def run_server():
 
 
 if __name__ == '__main__':
-    logger.info("Start exporter")
+    logger.warning("[INFO] Start exporter")
     
     os.makedirs(CACHE_DIR, exist_ok=True)
     logger.info(f"Директория для кэша проверена/создана: {CACHE_DIR}")
@@ -265,7 +270,7 @@ if __name__ == '__main__':
     threading.Thread(target=run_server, daemon=True).start()
     
     client.connect_async(MQTT_BROKER, MQTT_PORT, 60)
-    client.loop_start()
+    client.loop_start()  # Фоновый цикл обработки MQTT
     
     logger.info("Ждём подключения к MQTT...")
     if not mqtt_connected.wait(timeout=15):
