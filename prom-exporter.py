@@ -287,7 +287,7 @@ if __name__ == '__main__':
             poll_data()
         
     except KeyboardInterrupt:
-        logger.info("Отключаем брокер...")
+        logger.info("Отключаем брокер")
         client.loop_stop()
         client.disconnect()
-        logger.info("Работа экспортера успешно завершена")
+        logger.info("Exporter остановлен")
